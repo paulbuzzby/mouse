@@ -19,9 +19,9 @@ from utils import plot_line
 from gpiozero_extended import Motor, PID
 
 # Setting general parameters
-tstop = 2  # Execution duration (s)
+tstop = 3  # Execution duration (s)
 tsample = 0.01  # Sampling period (s)
-thetasp = 60  # Motor position set point (deg)
+targetMotorAngle = 360  # Motor position set point (deg)
 tau = 0.1  # Speed low-pass filter response time (s)
 
 # Creating PID controller object
@@ -31,12 +31,9 @@ kd = 0.0009
 taupid = 0.01
 pid = PID(tsample, kp, ki, kd, tau=taupid)
 
-# Creating motor object using GPIO pins 16, 17, and 18
-# (using SN754410 quadruple half-H driver chip)
-# Integrated encoder on GPIO pins 24 and 25.
-mymotor = Motor(
-    enable1=27, pwm1=12, 
-    encoder1=17, encoder2=18, encoderppr=300.8)
+
+mymotor = Motor(direction=27, pwm1=12, encoder1=17, encoder2=18, encoderppr=2660)
+
 mymotor.reset_angle()
 
 # Pre-allocating output arrays
@@ -50,34 +47,42 @@ tprev = 0
 tcurr = 0
 tstart = time.perf_counter()
 
-# Running execution loop
-print('Running code for', tstop, 'seconds ...')
-while tcurr <= tstop:
-    # Pausing for `tsample` to give CPU time to process encoder signal
-    time.sleep(tsample)
-    # Getting current time (s)
-    tcurr = time.perf_counter() - tstart
-    # Getting motor shaft angular position: I/O (data in)
-    thetacurr = mymotor.get_angle()
-    # Calculating closed-loop output
-    ucurr = pid.control(thetasp, thetacurr)
-    # Assigning motor output: I/O (data out)
-    mymotor.set_output(ucurr)
-    # Updating output arrays
-    t.append(tcurr)
-    theta.append(thetacurr)
-    u.append(ucurr)
-    # Updating previous values
-    thetaprev = thetacurr
-    tprev = tcurr
+try:
+    # Running execution loop
+    print('Running code for', tstop, 'seconds ...')
+    while tcurr <= tstop:
+        # Pausing for `tsample` to give CPU time to process encoder signal
+        time.sleep(tsample)
+        # Getting current time (s)
+        tcurr = time.perf_counter() - tstart
+        # Getting motor shaft angular position: I/O (data in)
+        currentMotorAngle = mymotor.get_angle()    
+        currentEncoderSteps = mymotor._encoder.getValue()
 
-print('Done.')
-# Stopping motor and releasing GPIO pins
-mymotor.set_output(0, brake=True)
+        #print("encoder count = ", currentEncoderSteps, "Angle = ", currentMotorAngle)
+        # Calculating closed-loop output
+        ucurr = pid.control(targetMotorAngle, currentMotorAngle)
+        # Assigning motor output: I/O (data out)
+        mymotor.set_output(ucurr)
+        #mymotor.set_output(0.2)
+        # Updating output arrays
+        t.append(tcurr)
+        theta.append(currentMotorAngle)
+        u.append(ucurr)
+        # Updating previous values
+        thetaprev = currentMotorAngle
+        tprev = tcurr
+
+    print('Done. Final Angle = ' ,mymotor.get_angle() )
+    # Stopping motor and releasing GPIO pins
+except:
+    print("Something went wrong")
+
+mymotor.set_output(0)
 del mymotor
 
 # Plotting results
-plot_line(
-    [t]*2, [theta, u], marker=True, axes='multi',
-    yname=['Shaft Position (deg.)', 'Control Output (-)'])
-plot_line(t[1::], 1000*np.diff(t), marker=True, yname='Sampling Period (ms)')
+# plot_line(
+#     [t]*2, [theta, u], marker=True, axes='multi',
+#     yname=['Shaft Position (deg.)', 'Control Output (-)'])
+# plot_line(t[1::], 1000*np.diff(t), marker=True, yname='Sampling Period (ms)')

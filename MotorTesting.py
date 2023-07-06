@@ -15,6 +15,7 @@ Author: Eduardo Nigro
 # Importing modules and classes
 import time
 import numpy as np
+import pigpio
 from utils import plot_line
 from gpiozero_extended import Motor, PID
 
@@ -31,8 +32,8 @@ kd = 0.0009
 taupid = 0.01
 pid = PID(tsample, kp, ki, kd, tau=taupid)
 
-
-mymotor = Motor(direction=27, pwm1=12, encoder1=17, encoder2=18, encoderppr=2660)
+pi = pigpio.pi()
+mymotor = Motor(pi, direction=27, pwm1=12, encoder1=17, encoder2=18, encoderppr=2660)
 
 mymotor.reset_angle()
 
@@ -47,6 +48,8 @@ tprev = 0
 tcurr = 0
 tstart = time.perf_counter()
 
+
+
 try:
     # Running execution loop
     print('Running code for', tstop, 'seconds ...')
@@ -57,14 +60,14 @@ try:
         tcurr = time.perf_counter() - tstart
         # Getting motor shaft angular position: I/O (data in)
         currentMotorAngle = mymotor.get_angle()    
-        currentEncoderSteps = mymotor._encoder.getValue()
+        currentEncoderSteps = mymotor.pos
 
         #print("encoder count = ", currentEncoderSteps, "Angle = ", currentMotorAngle)
         # Calculating closed-loop output
         ucurr = pid.control(targetMotorAngle, currentMotorAngle)
         # Assigning motor output: I/O (data out)
         mymotor.set_output(ucurr)
-        #mymotor.set_output(0.2)
+        #mymotor.set_output(0.1)
         # Updating output arrays
         t.append(tcurr)
         theta.append(currentMotorAngle)
@@ -80,6 +83,7 @@ except:
 
 mymotor.set_output(0)
 del mymotor
+pi.stop()
 
 # Plotting results
 # plot_line(

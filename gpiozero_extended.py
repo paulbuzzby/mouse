@@ -12,6 +12,112 @@ from gpiozero import DigitalOutputDevice, PWMOutputDevice, RotaryEncoder, PhaseE
 
 import RPi.GPIO as GPIO
 
+import pigpio
+
+class Decoder:
+
+   """Class to decode mechanical rotary encoder pulses."""
+
+   def __init__(self, pi, gpioA, gpioB, callback):
+
+      """
+      Instantiate the class with the pi and gpios connected to
+      rotary encoder contacts A and B.  The common contact
+      should be connected to ground.  The callback is
+      called when the rotary encoder is turned.  It takes
+      one parameter which is +1 for clockwise and -1 for
+      counterclockwise.
+
+      EXAMPLE
+
+      import time
+      import pigpio
+
+      import rotary_encoder
+
+      pos = 0
+
+      def callback(way):
+
+         global pos
+
+         pos += way
+
+         print("pos={}".format(pos))
+
+      pi = pigpio.pi()
+
+      decoder = rotary_encoder.decoder(pi, 7, 8, callback)
+
+      time.sleep(300)
+
+      decoder.cancel()
+
+      pi.stop()
+
+      """
+
+      self.pi = pi
+      self.gpioA = gpioA
+      self.gpioB = gpioB
+      self.callback = callback
+
+      self.levA = 0
+      self.levB = 0
+
+      self.lastGpio = None
+
+      self.pi.set_mode(gpioA, pigpio.INPUT)
+      self.pi.set_mode(gpioB, pigpio.INPUT)
+
+      self.pi.set_pull_up_down(gpioA, pigpio.PUD_UP)
+      self.pi.set_pull_up_down(gpioB, pigpio.PUD_UP)
+
+      self.cbA = self.pi.callback(gpioA, pigpio.EITHER_EDGE, self._pulse)
+      self.cbB = self.pi.callback(gpioB, pigpio.EITHER_EDGE, self._pulse)
+
+   def _pulse(self, gpio, level, tick):
+
+      """
+      Decode the rotary encoder pulse.
+
+                   +---------+         +---------+      0
+                   |         |         |         |
+         A         |         |         |         |
+                   |         |         |         |
+         +---------+         +---------+         +----- 1
+
+             +---------+         +---------+            0
+             |         |         |         |
+         B   |         |         |         |
+             |         |         |         |
+         ----+         +---------+         +---------+  1
+      """
+
+      if gpio == self.gpioA:
+         self.levA = level
+      else:
+         self.levB = level;
+
+      if gpio != self.lastGpio: # debounce
+         self.lastGpio = gpio
+
+         if   gpio == self.gpioA and level == 1:
+            if self.levB == 1:
+               self.callback(1)
+         elif gpio == self.gpioB and level == 1:
+            if self.levA == 1:
+               self.callback(-1)
+
+   def cancel(self):
+
+      """
+      Cancel the rotary encoder decoder.
+      """
+
+      self.cbA.cancel()
+      self.cbB.cancel()
+
 class Encoder: # https://github.com/nstansby/rpi-rotary-encoder-python/blob/master/encoder.py
 
     def __init__(self, leftPin, rightPin, callback=None):
@@ -77,61 +183,10 @@ class Encoder: # https://github.com/nstansby/rpi-rotary-encoder-python/blob/mast
 
 
 class Motor:
-    """
-    The class to represent a DC motor controlled with an H-bridge driver.
-    An encoder can be used to measure the angular position of the output shaft.
-
-    Two types of drivers are allowed:
-
-        * Single enable with dual PWM for forward and backward rotation control
-        * Single PWM with dual enable for forward and backward rotation control
-
-    Set up a motor with single enable:
-    (SN754410 quadruple half-H driver chip)
-
-        >>> from gpiozero_extended import Motor
-        >>> mymotor = Motor(enable1=16, pwm1=17, pwm2=18)
-
-    Set up a motor with single pwm:
-    (L298 dual H-bridge motor speed controller board)
-
-        >>> from gpiozero_extended import Motor
-        >>> mymotor = Motor(enable1=16, enable2=17, pwm1=18)
-
-    Set up a motor with single enable and an encoder with 450 PPR:
-    (SN754410 quadruple half-H driver chip)
-
-        >>> from gpiozero_extended import Motor
-        >>> mymotor = Motor(
-            enable1=16, pwm1=17, pwm2=18,
-            encoder1=24, encoder2=25, encoderppr=450)
-
-    :param enable1: The GPIO pin that is connected to the enable 1 of the driver.
-    :type enable1: int or str
-    :param enable2: The GPIO pin that is connected to the enable 2 of the driver.
-        This value is ignored for a single enable driver.
-    :type enable2: int or str
-    :param pwn1: The GPIO pin that is connected to the PWM 1 of the driver.
-    :type pwm1: int or str
-    :param pwm2: The GPIO pin that is connected to the PWM 2 of the driver.
-        This value is ignored for a single PWM driver.
-    :type pwm2: int or str
-    :param encoder1: The GPIO pin that is connected to the encoder phase A.
-    :type encoder1: int or str
-    :param encoder2: The GPIO pin that is connected to the encoder phase B.
-    :type encoder2: int or str
-    :param encoderppr: The number of Pulses Per Revolution (PPR) of the encoder.
-        Default value is ``300``.
-    :type encoderppr: int
-
-    .. note::
-        Always use `del` to delete the motor object after it's used to
-        release the GPIO pins.
-
-    """
-
+    
+    
     def __init__(
-        self, direction=None, pwm1=None,
+        self, pi, direction=None, pwm1=None,
         encoder1=None, encoder2=None, encoderppr=300):
         """
         Class constructor.
@@ -139,23 +194,24 @@ class Motor:
         """
         # Identifying motor driver type and assigning appropriate GPIO pins
         if pwm1 and direction:
-                        
-            #self._direction = DigitalOutputDevice(direction)
-            #self._pwm1 = PWMOutputDevice(pwm1)
             self._motor = PhaseEnableMotor(direction, pwm1, True)
         
         else:
             raise Exception('Pin configuration is incorrect.')
         # Checking for encoder
         if encoder1 and encoder2:
-            #self._encoder = RotaryEncoder(encoder1, encoder2, max_steps=0)
-            self._encoder = Encoder(encoder1, encoder2)
+            self._encoder = Decoder(pi, encoder1, encoder2, self.callback)# Encoder(encoder1, encoder2)
             self._ppr = encoderppr
         else:
             raise Exception('Encoder pins set incorrect.')
         # Initializing attributes
         self._value = 0  # Motor output value
         self._angle0 = 0  # Initial angular position
+        self.pos = 0
+
+    def callback(self, way):
+      self.pos += way
+    #   print("pos={}".format(self.pos))
 
     def __del__(self):
         """
@@ -166,7 +222,7 @@ class Motor:
         self._motor.close()
         if self._encoder:
             time.sleep(0.1)  # Added this to avoid segmentation fault :(
-            del self._encoder
+            self._encoder.cancel()
 
     @property
     def value(self):
@@ -189,8 +245,10 @@ class Motor:
         >>> mymotor.get_angle()
 
         """
+        
         if self._encoder:
-            angle = 360 / self._ppr * self._encoder.getValue() - self._angle0
+            # angle = 360 / self._ppr * self._encoder.getValue() - self._angle0
+            angle = 360 / self._ppr * self.pos - self._angle0
         else:
             angle = None
         return angle
@@ -202,8 +260,10 @@ class Motor:
         >>> mymotor.reset_angle()
 
         """
+        
         if self._encoder:
-            self._angle0 = 360 / self._ppr * self._encoder.getValue()
+            #self._angle0 = 360 / self._ppr * self._encoder.getValue()
+            self._angle0 = 360 / self._ppr * self.pos
 
     def set_output(self, output):
         """

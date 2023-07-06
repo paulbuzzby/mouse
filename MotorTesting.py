@@ -26,9 +26,9 @@ targetMotorAngle = 360  # Motor position set point (deg)
 tau = 0.1  # Speed low-pass filter response time (s)
 
 # Creating PID controller object
-kp = 0.036
-ki = 0.379
-kd = 0.0009
+kp = 1#0.036
+ki = 0#0.379
+kd = 0#0.0009
 taupid = 0.01
 pid = PID(tsample, kp, ki, kd, tau=taupid)
 

@@ -18,6 +18,7 @@ import numpy as np
 import pigpio
 from utils import plot_line
 from gpiozero_extended import Motor, PID
+#from simple_pid import PID
 
 # Setting general parameters
 tstop = 3  # Execution duration (s)
@@ -26,11 +27,14 @@ targetMotorAngle = 360  # Motor position set point (deg)
 tau = 0.1  # Speed low-pass filter response time (s)
 
 # Creating PID controller object
-kp = 1#0.036
-ki = 0#0.379
-kd = 0#0.0009
+kp = 0.036
+ki = 0.379
+kd = 0.0009
 taupid = 0.01
 pid = PID(tsample, kp, ki, kd, tau=taupid)
+#pid = PID(2, 0.3, 0.005, setpoint=targetMotorAngle)
+# pid.sample_time = tsample
+# pid.output_limits = (-1, 1)
 
 pi = pigpio.pi()
 mymotor = Motor(pi, direction=27, pwm1=12, encoder1=17, encoder2=18, encoderppr=2660)
@@ -65,8 +69,12 @@ try:
         #print("encoder count = ", currentEncoderSteps, "Angle = ", currentMotorAngle)
         # Calculating closed-loop output
         ucurr = pid.control(targetMotorAngle, currentMotorAngle)
+        #ucurr = pid(currentMotorAngle)
         # Assigning motor output: I/O (data out)
-        mymotor.set_output(ucurr)
+        if(-.01 <= ucurr <= 0.01) :
+            mymotor.set_output(0)
+        else :
+            mymotor.set_output(ucurr)
         #mymotor.set_output(0.1)
         # Updating output arrays
         t.append(tcurr)
@@ -86,7 +94,7 @@ del mymotor
 pi.stop()
 
 # Plotting results
-# plot_line(
-#     [t]*2, [theta, u], marker=True, axes='multi',
-#     yname=['Shaft Position (deg.)', 'Control Output (-)'])
-# plot_line(t[1::], 1000*np.diff(t), marker=True, yname='Sampling Period (ms)')
+plot_line(
+     [t]*2, [theta, u], marker=True, axes='multi',
+     yname=['Shaft Position (deg.)', 'Control Output (-)'])
+plot_line(t[1::], 1000*np.diff(t), marker=True, yname='Sampling Period (ms)')

@@ -6,7 +6,7 @@ from gpiozero import LED
 from gpiozero import MCP3008
 from time import sleep
 
-led = LED(17)
+led = LED(4)
 
 # while True:
 #     led.on()

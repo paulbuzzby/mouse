@@ -147,7 +147,8 @@ def plot_line(
             markersize.append(8)
     # Setting figure parameters
     if figsize:
-        wfig, hfig = figsize
+        wfig = figsize
+        hfig = figsize
     else:
         wfig = 650
         hfig = 100 + 150*naxes

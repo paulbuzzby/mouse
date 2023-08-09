@@ -15,23 +15,23 @@ led = LED(ledPin)
 #     sleep(1)
 
 led.off()
-rightSensor = MCP3008(channel=0)
-leftSensor = MCP3008(channel=1)
+leftSensor = MCP3008(channel=6)
+#rightSensor = MCP3008(channel=1)
 
 scale = 3.3
 
 while True:
     led.off()
-    rightOffValue = rightSensor.raw_value
-    leftOffValue = leftSensor.raw_value
+    #rightOffValue = rightSensor.value
+    leftOffValue = leftSensor.value
 
     led.on()
-    rightOnValue = rightSensor.raw_value
-    leftOnValue = leftSensor.raw_value
-    led.off();
-    voltage = rightSensor.value * scale
+    #rightOnValue = rightSensor.value
+    leftOnValue = leftSensor.value
+    led.off()
+    #voltage = rightSensor.value * scale
 
-    print("RightOff is: ", '{:.2f}'.format(rightOffValue), "Right on is ", '{:.2f}'.format(rightOnValue), " difference is: '{:.2f}'".format(rightOnValue-rightOffValue))
+    #print("RightOff is: ", '{:.2f}'.format(rightOffValue), "Right on is ", '{:.2f}'.format(rightOnValue), " difference is: '{:.2f}'".format(rightOnValue-rightOffValue))
     print("LeftOff is: ", '{:.2f}'.format(leftOffValue), "Left on is ", '{:.2f}'.format(leftOnValue), " difference is: '{:.2f}'".format(leftOnValue-leftOffValue))
     
     sleep(0.02)

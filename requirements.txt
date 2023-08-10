@@ -2,3 +2,4 @@ matplotlib
 plotly
 gpiozero
 simple-pid
+adafruit-mcp3008
